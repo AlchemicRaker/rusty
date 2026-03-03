@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "rusty-core",
+    "rusty-cli",
+]
+resolver = "2"
