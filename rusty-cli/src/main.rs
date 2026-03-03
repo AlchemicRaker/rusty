@@ -1,5 +1,5 @@
 use clap::Parser;
-use rusty_core::run_agent;
+use rusty_core::{RepoConfig, run_agent};
 use tokio::runtime::Runtime;
 
 // --session <session_id> --step
@@ -21,5 +21,10 @@ fn main() {
 
     let rt = Runtime::new().unwrap();
 
-    let _result = rt.block_on(async { run_agent(session_id.clone(), args.step).await });
+    let repo_config = RepoConfig::Local {
+        path: "local_test_repo".to_string(),
+    };
+
+    let _result =
+        rt.block_on(async { run_agent(session_id.clone(), args.step, repo_config).await });
 }
