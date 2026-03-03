@@ -17,7 +17,7 @@ fn main() {
     let args = Args::parse();
     let session_id = args.session.expect("Missing session ID");
 
-    println!("session {}, skip {}", session_id, args.step);
+    //println!("session {}, skip {}", session_id, args.step);
 
     let rt = Runtime::new().unwrap();
 
