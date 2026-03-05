@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use std::path::Path;
-use tokio::fs::create_dir_all;
-use tracing::info;
+use tokio::fs::{create_dir_all, read_to_string};
+use tracing::{info, trace, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -86,14 +86,23 @@ struct LocalRepoService {
 #[async_trait]
 impl RepoService for LocalRepoService {
     async fn load_issue(&self) -> Result<String> {
-        // TODO: local issue thread loaded from file
-        Ok(format!("Local dummy issue at path: {}", self.path))
+        let issue_path = format!("{}/summary.txt", self.path);
+        let issue_summary = read_to_string(Path::new(&issue_path))
+            .await
+            .expect("issue path to exist");
+        Ok(issue_summary.to_string())
     }
 }
 
 #[derive(Debug)]
 enum Node {
     IssueIngestor,
+    SpecRefiner,
+    Planner,
+    Coder,
+    Tester,
+    PRSubmitter,
+    PostPR,
 }
 
 #[derive(Debug)]
@@ -103,19 +112,13 @@ enum ControlFlow {
     Halt,
 }
 
-// Dummy node function
-async fn run_node(_ctx: &mut AgentContext) -> Result<ControlFlow, Box<dyn std::error::Error>> {
-    info!("Running {}({:?})", _ctx.session_id, _ctx.current_node);
-    Ok(ControlFlow::Halt)
-}
-
 async fn prep_logging() -> Result<(), Box<dyn std::error::Error>> {
     let logs_path = Path::new("./logs");
     create_dir_all(logs_path).await?;
     let rolling_file_appender = RollingFileAppender::new(Rotation::DAILY, logs_path, "agent.log");
 
     let env_filter_level = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("trace"));
 
     tracing_subscriber::registry()
         .with(env_filter_level)
@@ -160,12 +163,10 @@ pub async fn run_agent(
             context.session_id, context.current_node
         );
 
-        // TODO: implement dispatch_node to call individual nodes
-        let result = run_node(&mut context).await?;
+        let result = dispatch_node(&mut context, &service).await?;
 
         if step_mode {
-            info!("Step completed, result {:?}", result);
-
+            trace!("Step completed, result {:?}", result);
             break;
         }
         match result {
@@ -175,7 +176,6 @@ pub async fn run_agent(
                     context.session_id, context.current_node, next_node
                 );
                 context.current_node = next_node;
-                break;
             }
             ControlFlow::Pause { reason, next_node } => {
                 info!(
@@ -185,7 +185,7 @@ pub async fn run_agent(
                 break;
             }
             ControlFlow::Halt => {
-                info!("Halting!");
+                info!("Halting...");
                 break;
             }
         }
@@ -193,4 +193,52 @@ pub async fn run_agent(
     // save state
     info!("Agent Session {} suspended", context.session_id);
     Ok(())
+}
+
+async fn dispatch_node(
+    context: &mut AgentContext,
+    service: &Box<dyn RepoService>,
+) -> Result<ControlFlow, Box<dyn std::error::Error>> {
+    trace!(
+        "Dispatching {}({:?})",
+        context.session_id, context.current_node
+    );
+    match context.current_node {
+        Node::IssueIngestor => issue_ingestor(context, service).await,
+        Node::SpecRefiner => spec_refiner(context, service).await,
+        _ => {
+            warn!(
+                "Node {:?} is undefined; Halting Session {}",
+                context.current_node, context.session_id
+            );
+            Ok(ControlFlow::Halt)
+        }
+    }
+}
+
+// For brand new issues, populate some baseline session state (AgentContext) just once
+async fn issue_ingestor(
+    context: &mut AgentContext,
+    service: &Box<dyn RepoService>,
+) -> Result<ControlFlow, Box<dyn std::error::Error>> {
+    context.issue_summary = Some(service.load_issue().await?);
+
+    info!(
+        "Session {} Ingested Issue {:?}",
+        context.session_id, context.issue_summary
+    );
+
+    Ok(ControlFlow::Continue {
+        next_node: Node::SpecRefiner,
+    })
+}
+
+async fn spec_refiner(
+    context: &mut AgentContext,
+    service: &Box<dyn RepoService>,
+) -> Result<ControlFlow, Box<dyn std::error::Error>> {
+    Ok(ControlFlow::Pause {
+        next_node: Node::SpecRefiner,
+        reason: "Waiting for issue clarification from user.".to_string(),
+    })
 }
