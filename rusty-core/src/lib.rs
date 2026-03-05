@@ -1,23 +1,12 @@
+mod logging;
+mod repo_service;
+use crate::repo_service::RepoService;
 use anyhow::Result;
-use async_trait::async_trait;
+pub use repo_service::RepoConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tokio::fs::{create_dir_all, read_to_string, write};
+use tokio::fs::{read_to_string, write};
 use tracing::{info, trace, warn};
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
-
-#[derive(Serialize, Deserialize)]
-pub enum RepoConfig {
-    Local {
-        path: String,
-    },
-    GitHub {
-        owner: String,
-        repo: String,
-        issue_number: u64,
-    },
-}
 
 #[derive(Serialize, Deserialize)]
 struct AgentContext {
@@ -53,65 +42,6 @@ impl AgentContext {
     }
 }
 
-#[async_trait]
-trait RepoService {
-    async fn load_issue(&self) -> Result<String>; // "loads" issue summary, at least
-}
-
-struct GitHubRepoService {
-    client: octocrab::Octocrab,
-    owner: String,
-    repo: String,
-    issue_number: u64,
-}
-
-impl GitHubRepoService {
-    fn new(owner: String, repo: String, issue_number: u64) -> Result<Self> {
-        let token = std::env::var("GITHUB_TOKEN")?;
-        let client = octocrab::Octocrab::builder()
-            .personal_token(token)
-            .build()?;
-        Ok(Self {
-            client,
-            owner,
-            repo,
-            issue_number,
-        })
-    }
-}
-
-#[async_trait]
-impl RepoService for GitHubRepoService {
-    async fn load_issue(&self) -> Result<String> {
-        let issue = self
-            .client
-            .issues(&self.owner, &self.repo)
-            .get(self.issue_number)
-            .await?;
-        Ok(format!(
-            "Issue #{}: {} - {}",
-            issue.number,
-            issue.title,
-            issue.body.unwrap_or_default()
-        ))
-    }
-}
-
-struct LocalRepoService {
-    path: String,
-}
-
-#[async_trait]
-impl RepoService for LocalRepoService {
-    async fn load_issue(&self) -> Result<String> {
-        let issue_path = format!("{}/summary.txt", self.path);
-        let issue_summary = read_to_string(Path::new(&issue_path))
-            .await
-            .expect("issue path to exist");
-        Ok(issue_summary.to_string())
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 enum Node {
     IssueIngestor,
@@ -130,53 +60,22 @@ enum ControlFlow {
     Halt,
 }
 
-async fn prep_logging() -> Result<(), Box<dyn std::error::Error>> {
-    let logs_path = Path::new("./logs");
-    create_dir_all(logs_path).await?;
-    let rolling_file_appender = RollingFileAppender::new(Rotation::DAILY, logs_path, "agent.log");
-
-    let env_filter_level = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("trace"));
-
-    tracing_subscriber::registry()
-        .with(env_filter_level)
-        .with(
-            fmt::layer()
-                .with_ansi(false)
-                .with_writer(rolling_file_appender),
-        )
-        .with(fmt::layer().with_writer(std::io::stdout))
-        .init();
-    Ok(())
-}
-
 pub async fn run_agent(
     session_id: String,
     step_mode: bool,
     repo_config: RepoConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // logging
-    prep_logging().await?;
+    logging::prep_logging().await?;
 
     // restore or generate baseline AgentContext
     let restored_context = AgentContext::load_from_json(session_id.clone()).await;
     let mut context = match restored_context {
         Ok(context) => context,
-        Err(_) => AgentContext::new(session_id, repo_config),
+        Err(_) => AgentContext::new(session_id, repo_config.clone()),
     };
 
-    let service: Box<dyn RepoService> = match &context.repo_config {
-        RepoConfig::Local { path } => Box::new(LocalRepoService { path: path.clone() }),
-        RepoConfig::GitHub {
-            owner,
-            repo,
-            issue_number,
-        } => Box::new(GitHubRepoService::new(
-            owner.clone(),
-            repo.clone(),
-            *issue_number,
-        )?),
-    };
+    let service = repo_service::create_repo_service(repo_config)?;
 
     info!("Agent Session {} resumed", context.session_id);
 
