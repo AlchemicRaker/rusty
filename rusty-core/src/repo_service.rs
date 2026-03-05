@@ -18,7 +18,7 @@ pub enum RepoConfig {
 
 #[async_trait]
 pub trait RepoService {
-    async fn load_issue(&self) -> Result<String>; // "loads" issue summary, at least
+    async fn load_issue(&self) -> Result<Issue>;
 }
 
 struct GitHubRepoService {
@@ -43,20 +43,67 @@ impl GitHubRepoService {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub enum CommentClass {
+    User,
+    Agent,
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Comment {
+    class: CommentClass,
+    body: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Issue {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub comments: Vec<Comment>,
+}
+
 #[async_trait]
 impl RepoService for GitHubRepoService {
-    async fn load_issue(&self) -> Result<String> {
-        let issue = self
-            .client
-            .issues(&self.owner, &self.repo)
-            .get(self.issue_number)
+    async fn load_issue(&self) -> Result<Issue> {
+        let base = self.client.issues(&self.owner, &self.repo);
+        let issue = base.get(self.issue_number).await?;
+
+        // let comment_count = self.client.iss
+        let first_page = base
+            .list_comments(self.issue_number)
+            .per_page(100)
+            .send()
             .await?;
-        Ok(format!(
-            "Issue #{}: {} - {}",
-            issue.number,
-            issue.title,
-            issue.body.unwrap_or_default()
-        ))
+
+        let comments: Vec<Comment> = self
+            .client
+            .all_pages(first_page)
+            .await?
+            .iter()
+            .filter(|f| match f.body {
+                Some(_) => true,
+                None => false,
+            })
+            .map(|f| {
+                let author = match f.user.login.as_str() {
+                    "AlchemicRaker" => CommentClass::Agent,
+                    _ => CommentClass::Other,
+                };
+                Comment {
+                    class: author,
+                    body: f.body.clone().expect("Expect non-empty body"),
+                }
+            })
+            .collect();
+
+        Ok(Issue {
+            number: issue.number,
+            title: issue.title,
+            body: issue.body.unwrap_or_default(),
+            comments,
+        })
     }
 }
 
@@ -66,12 +113,12 @@ struct LocalRepoService {
 
 #[async_trait]
 impl RepoService for LocalRepoService {
-    async fn load_issue(&self) -> Result<String> {
-        let issue_path = format!("{}/summary.txt", self.path);
-        let issue_summary = read_to_string(Path::new(&issue_path))
-            .await
-            .expect("issue path to exist");
-        Ok(issue_summary.to_string())
+    async fn load_issue(&self) -> Result<Issue> {
+        let path_str = format!("{}/issue.json", self.path).to_string();
+        let path = Path::new(&path_str);
+        let json = read_to_string(path).await?;
+        let context: Issue = serde_json::from_str(&json)?;
+        Ok(context)
     }
 }
 

@@ -2,6 +2,7 @@ mod logging;
 mod repo_service;
 use crate::repo_service::RepoService;
 use anyhow::Result;
+use repo_service::Issue;
 pub use repo_service::RepoConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -13,16 +14,16 @@ struct AgentContext {
     session_id: String,
     current_node: Node,
     repo_config: RepoConfig,
-    issue_summary: Option<String>, // brief auto-generated issue summary
+    issue: Issue, // brief auto-generated issue summary
 }
 
 impl AgentContext {
-    fn new(session_id: String, repo_config: RepoConfig) -> Self {
+    fn new(session_id: String, repo_config: RepoConfig, issue: Issue) -> Self {
         Self {
             session_id,
             repo_config,
             current_node: Node::IssueIngestor,
-            issue_summary: None,
+            issue,
         }
     }
     // save and load from local sessions folder
@@ -69,13 +70,15 @@ pub async fn run_agent(
     logging::prep_logging().await?;
 
     // restore or generate baseline AgentContext
+
+    let service = repo_service::create_repo_service(repo_config.clone())?;
+    let issue = service.load_issue().await?;
+
     let restored_context = AgentContext::load_from_json(session_id.clone()).await;
     let mut context = match restored_context {
         Ok(context) => context,
-        Err(_) => AgentContext::new(session_id, repo_config.clone()),
+        Err(_) => AgentContext::new(session_id, repo_config, issue),
     };
-
-    let service = repo_service::create_repo_service(repo_config)?;
 
     info!("Agent Session {} resumed", context.session_id);
 
@@ -147,11 +150,11 @@ async fn issue_ingestor(
     context: &mut AgentContext,
     service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
-    context.issue_summary = Some(service.load_issue().await?);
+    // context.issue_summary = Some(service.load_issue().await?);
 
     info!(
-        "Session {} Ingested Issue {:?}",
-        context.session_id, context.issue_summary
+        "Session {} Ingested Issue {}",
+        context.session_id, context.issue.title
     );
 
     Ok(ControlFlow::Continue {
