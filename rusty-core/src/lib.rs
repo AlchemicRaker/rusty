@@ -1,11 +1,13 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
-use tokio::fs::{create_dir_all, read_to_string};
+use tokio::fs::{create_dir_all, read_to_string, write};
 use tracing::{info, trace, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
+#[derive(Serialize, Deserialize)]
 pub enum RepoConfig {
     Local {
         path: String,
@@ -16,6 +18,8 @@ pub enum RepoConfig {
         issue_number: u64,
     },
 }
+
+#[derive(Serialize, Deserialize)]
 struct AgentContext {
     session_id: String,
     current_node: Node,
@@ -32,7 +36,21 @@ impl AgentContext {
             issue_summary: None,
         }
     }
-    // TODO: save and load here?
+    // save and load from local sessions folder
+    async fn save_to_json(&self) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        let path_str = format!("sessions/{}_context.json", self.session_id).to_string();
+        let path = Path::new(&path_str);
+        write(path, json).await?;
+        Ok(())
+    }
+    async fn load_from_json(session_id: String) -> Result<Self> {
+        let path_str = format!("sessions/{}_context.json", session_id).to_string();
+        let path = Path::new(&path_str);
+        let json = read_to_string(path).await?;
+        let context: AgentContext = serde_json::from_str(&json)?;
+        Ok(context)
+    }
 }
 
 #[async_trait]
@@ -94,7 +112,7 @@ impl RepoService for LocalRepoService {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Node {
     IssueIngestor,
     SpecRefiner,
@@ -140,8 +158,13 @@ pub async fn run_agent(
     // logging
     prep_logging().await?;
 
-    // find AgentContext
-    let mut context = AgentContext::new(session_id, repo_config);
+    // restore or generate baseline AgentContext
+    let restored_context = AgentContext::load_from_json(session_id.clone()).await;
+    let mut context = match restored_context {
+        Ok(context) => context,
+        Err(_) => AgentContext::new(session_id, repo_config),
+    };
+
     let service: Box<dyn RepoService> = match &context.repo_config {
         RepoConfig::Local { path } => Box::new(LocalRepoService { path: path.clone() }),
         RepoConfig::GitHub {
@@ -191,6 +214,10 @@ pub async fn run_agent(
         }
     }
     // save state
+    context
+        .save_to_json()
+        .await
+        .expect("Failed to persist session state");
     info!("Agent Session {} suspended", context.session_id);
     Ok(())
 }
