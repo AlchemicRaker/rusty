@@ -1,7 +1,8 @@
+mod grok_client;
 mod logging;
 mod repo_service;
-use crate::repo_service::RepoService;
-use anyhow::Result;
+use crate::{grok_client::GrokClient, repo_service::RepoService};
+use anyhow::{Context, Result};
 use repo_service::Issue;
 pub use repo_service::RepoConfig;
 use serde::{Deserialize, Serialize};
@@ -120,11 +121,13 @@ pub async fn run_agent(
             }
         }
     }
-    // save state
+
+    // always save state after the loop, regardless of reason for pause or halt
     context
         .save_to_json()
         .await
         .expect("Failed to persist session state");
+
     info!("Agent Session {} suspended", context.session_id);
     Ok(())
 }
@@ -165,24 +168,77 @@ async fn issue_ingestor(
     })
 }
 
+#[derive(Deserialize)]
+struct SpecDecision {
+    #[serde(rename = "approved_and_ready_for_implementation")]
+    approved: bool,
+    questions: Vec<String>,
+    refined_spec: String,
+}
+
 async fn spec_refiner(
     context: &mut AgentContext,
     service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
-    let maybe_last_comment = context.issue.comments.last();
-    if let Some(last_comment) = maybe_last_comment
-        && last_comment.author == repo_service::AuthorClass::Agent
-    {
-        return Ok(ControlFlow::Pause {
-            reason: "Already responded to user, still waiting for reply.".to_string(),
+    let grok = GrokClient::new().expect("Failed to create a GrokClient");
+
+    let system = load_prompt("spec_refiner")
+        .await
+        .expect("Failed to load spec refiner prompt");
+
+    let user = format!(
+        "Issue title: {}\nBody: {}\nComments: {:?}",
+        context.issue.title, context.issue.body, context.issue.comments
+    );
+
+    let schema = serde_json::json!({
+        "name": "spec_decision",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "approved_and_ready_for_implementation": { "type": "boolean" },
+                "questions": {"type":"array", "items": {"type":"string"}},
+                "refined_spec": {"type":"string"}
+            },
+            "required": ["approved_and_ready_for_implementation", "questions", "refined_spec"],
+            "additionalProperties": false
+        }
+    });
+
+    let decision: SpecDecision = grok
+        .call(
+            grok_client::Model::Grok4_1FastReasoning,
+            &system,
+            &user,
+            schema,
+            "spec_decision",
+        )
+        .await
+        .expect("Failed to call Grok to get a spec decision");
+
+    info!(
+        "Grok decision: approved={}, questions={:?}, refined_spec={}",
+        decision.approved, decision.questions, decision.refined_spec
+    );
+
+    if decision.approved {
+        // Respond with a refined spec
+        Ok(ControlFlow::Continue {
+            next_node: Node::Planner,
+        })
+    } else {
+        // Respond with a list of questions
+        Ok(ControlFlow::Pause {
+            reason: format!("Spec needs clarification: {:?}", decision.questions),
             next_node: Node::SpecRefiner,
-        });
+        })
     }
-    // User has given us an update
-    // If it's sufficient clarification or confirmation, we can proceed to Node::Planner
-    // otherwise, respond with a request for more clarification from the user.
-    Ok(ControlFlow::Pause {
-        next_node: Node::SpecRefiner,
-        reason: "Waiting for issue clarification from user.".to_string(),
-    })
+}
+
+async fn load_prompt(name: &str) -> Result<String> {
+    let path = format!("prompts/{}.md", name);
+    let content = read_to_string(&path)
+        .await
+        .expect(format!("Failed to read prompt file {}", path).as_str());
+    Ok(content)
 }

@@ -45,14 +45,14 @@ impl GitHubRepoService {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub enum AuthorClass {
     User,
     Agent,
     Other,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Comment {
     pub author: AuthorClass,
     pub body: String,
