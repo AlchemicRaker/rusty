@@ -186,9 +186,18 @@ async fn spec_refiner(
         .await
         .expect("Failed to load spec refiner prompt");
 
+    let repo_string = match &context.repo_config {
+        RepoConfig::GitHub {
+            owner,
+            repo,
+            issue_number: _,
+        } => format!("Repository: https://github.com/{}/{}\n", owner, repo),
+        _ => "".to_string(),
+    };
+
     let user = format!(
-        "Issue title: {}\nBody: {}\nComments: {:?}",
-        context.issue.title, context.issue.body, context.issue.comments
+        "{}Issue title: {}\nBody: {}\nComments: {:?}",
+        repo_string, context.issue.title, context.issue.body, context.issue.comments
     );
 
     let schema = serde_json::json!({
