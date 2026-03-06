@@ -5,17 +5,24 @@ use tracing::{debug, info};
 
 #[derive(Deserialize)]
 pub struct GrokResponse {
-    pub choices: Vec<Choice>,
+    pub id: String,
+    pub output: Vec<OutputItem>,
 }
 
 #[derive(Deserialize)]
-pub struct Choice {
-    pub message: Message,
+#[serde(tag = "type")]
+pub enum OutputItem {
+    #[serde(rename = "message")]
+    Message { content: Vec<ContentItem> },
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Deserialize)]
-pub struct Message {
-    content: String,
+pub struct ContentItem {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: String,
 }
 
 pub struct GrokClient {
@@ -62,7 +69,7 @@ impl GrokClient {
     {
         let payload = serde_json::json!({
             "model": model_to_str(model),
-            "messages": [
+            "input": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
@@ -74,11 +81,12 @@ impl GrokClient {
                     "schema": schema,
                 }
             }
+            // TODO: "tools": []
         });
 
         let resp = self
             .client
-            .post("https://api.x.ai/v1/chat/completions")
+            .post("https://api.x.ai/v1/responses")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&payload)
             .send()
@@ -86,14 +94,24 @@ impl GrokClient {
             .expect("Failed to query Grok API");
 
         let raw_text = resp.text().await?;
+        debug!("Raw Grok /responses body: {}", &raw_text);
 
         let parsed: GrokResponse =
             serde_json::from_str(&raw_text).expect("Failed to convert Grok Response to JSON");
 
-        let content_str = parsed.choices[0].message.content.clone();
+        let content_str = parsed
+            .output
+            .into_iter()
+            .find_map(|item| match item {
+                OutputItem::Message { content } => content
+                    .into_iter()
+                    .find(|c| c.content_type == "output_text")
+                    .map(|c| c.text),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow::anyhow!("No output_text content in Grok response"))?;
 
         let typed: T = serde_json::from_str(&content_str)
-            .or_else(|_| serde_json::from_value(serde_json::from_str(&content_str)?))
             .expect("Failed to deserialize Grok Response into expected type");
 
         Ok(typed)

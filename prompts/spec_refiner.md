@@ -12,5 +12,5 @@ Respond ONLY in valid JSON matching this schema:
   "ready_for_implementation": boolean,
   "proposed_spec_fully_approved_by_user": boolean,
   "questions": array of strings,
-  "refined_spec": markdown string
+  "spec_draft": markdown string
 }

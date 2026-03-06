@@ -175,7 +175,7 @@ struct SpecDecision {
     #[serde(rename = "proposed_spec_fully_approved_by_user")]
     approved: bool,
     questions: Vec<String>,
-    refined_spec: String,
+    spec_draft: String,
 }
 
 async fn spec_refiner(
@@ -223,9 +223,9 @@ async fn spec_refiner(
                 "ready_for_implementation": { "type": "boolean" },
                 "proposed_spec_fully_approved_by_user": { "type": "boolean" },
                 "questions": {"type":"array", "items": {"type":"string"}},
-                "refined_spec": {"type":"string"}
+                "spec_draft": {"type":"string"}
             },
-            "required": ["ready_for_implementation", "proposed_spec_fully_approved_by_user", "questions", "refined_spec"],
+            "required": ["ready_for_implementation", "proposed_spec_fully_approved_by_user", "questions", "spec_draft"],
             "additionalProperties": false
         }
     });
@@ -242,8 +242,8 @@ async fn spec_refiner(
         .expect("Failed to call Grok to get a spec decision");
 
     info!(
-        "Grok decision: ready={} approved={}, questions={:?}, refined_spec={}",
-        decision.ready, decision.approved, decision.questions, decision.refined_spec
+        "Grok decision: ready={} approved={}, questions={:?}, spec_draft={}",
+        decision.ready, decision.approved, decision.questions, decision.spec_draft
     );
 
     if decision.approved && decision.ready {
@@ -259,7 +259,7 @@ async fn spec_refiner(
             next_node: Node::Planner,
         })
     } else if decision.ready || decision.questions.iter().count() == 0 {
-        let response_body = format!("**Proposed Spec:**\n\n{}", decision.refined_spec);
+        let response_body = format!("**Proposed Spec:**\n\n{}", decision.spec_draft);
 
         service
             .post_comment(&response_body)
@@ -267,7 +267,7 @@ async fn spec_refiner(
             .expect("Failed to post spec proposal response");
 
         Ok(ControlFlow::Pause {
-            reason: format!("Spec needs user approval: {:?}", decision.refined_spec),
+            reason: format!("Spec needs user approval: {:?}", decision.spec_draft),
             next_node: Node::SpecRefiner,
         })
     } else {
