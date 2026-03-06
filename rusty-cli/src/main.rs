@@ -26,7 +26,11 @@ fn main() {
     let args = Args::parse();
     let session_id = args.session.expect("Missing session ID");
 
-    let rt = Runtime::new().unwrap();
+    // dumb fix for conflicting dependencies in Rust, apparently
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+    dotenvy::dotenv().ok();
 
     let repo_config: RepoConfig = if let Some(path) = args.local {
         RepoConfig::Local { path }
@@ -34,6 +38,7 @@ fn main() {
         let (owner, repo) = repo
             .split_once("/")
             .expect("--repo must have user/repository");
+
         RepoConfig::GitHub {
             owner: owner.to_string(),
             repo: repo.to_string(),
@@ -43,6 +48,7 @@ fn main() {
         panic!("Must provide --local OR --repo + --issue");
     };
 
+    let rt = Runtime::new().unwrap();
     let _result =
         rt.block_on(async { run_agent(session_id.clone(), args.step, repo_config).await });
 }

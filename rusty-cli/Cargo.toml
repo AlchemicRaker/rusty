@@ -12,3 +12,5 @@ tracing-appender = "0.2.4"
 tracing-subscriber = "0.3.22"
 rusty-core = { path = "../rusty-core" }
 clap = { version = "4.5.60", features = ["derive"] }
+dotenvy = "0.15.7"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }

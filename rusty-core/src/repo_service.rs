@@ -30,10 +30,12 @@ struct GitHubRepoService {
 
 impl GitHubRepoService {
     fn new(owner: String, repo: String, issue_number: u64) -> Result<Self> {
-        let token = std::env::var("GITHUB_TOKEN")?;
+        let token =
+            std::env::var("GITHUB_TOKEN").expect("Couldn't find GITHUB_TOKEN in environment");
         let client = octocrab::Octocrab::builder()
             .personal_token(token)
-            .build()?;
+            .build()
+            .expect("Failed to create Octocrab client");
         Ok(Self {
             client,
             owner,
@@ -43,8 +45,8 @@ impl GitHubRepoService {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub enum CommentClass {
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum AuthorClass {
     User,
     Agent,
     Other,
@@ -52,8 +54,8 @@ pub enum CommentClass {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Comment {
-    class: CommentClass,
-    body: String,
+    pub author: AuthorClass,
+    pub body: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -88,13 +90,18 @@ impl RepoService for GitHubRepoService {
             })
             .map(|f| {
                 let author = match f.user.login.as_str() {
-                    "AlchemicRaker" => CommentClass::Agent,
-                    _ => CommentClass::Other,
+                    "AlchemicRaker" => AuthorClass::User,
+                    "mecharaker" => AuthorClass::Agent,
+                    _ => AuthorClass::Other,
                 };
                 Comment {
-                    class: author,
+                    author: author,
                     body: f.body.clone().expect("Expect non-empty body"),
                 }
+            })
+            .filter(|f| match f.author {
+                AuthorClass::Other => false, // remove all untrusted messages entirely
+                _ => true,
             })
             .collect();
 

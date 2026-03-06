@@ -45,8 +45,8 @@ impl AgentContext {
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Node {
-    IssueIngestor,
-    SpecRefiner,
+    IssueIngestor, // currently nonfunctional - issue state is refreshed regardless of which node is resumed
+    SpecRefiner,   // implementing now
     Planner,
     Coder,
     Tester,
@@ -67,19 +67,24 @@ pub async fn run_agent(
     repo_config: RepoConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // logging
+    println!("a");
     logging::prep_logging().await?;
-
+    println!("b");
     // restore or generate baseline AgentContext
 
-    let service = repo_service::create_repo_service(repo_config.clone())?;
-    let issue = service.load_issue().await?;
-
+    let service = repo_service::create_repo_service(repo_config.clone())
+        .expect("Failed to create repo service");
+    let issue = service
+        .load_issue()
+        .await
+        .expect("Failed to load issues from repo");
+    println!("c");
     let restored_context = AgentContext::load_from_json(session_id.clone()).await;
     let mut context = match restored_context {
         Ok(context) => AgentContext { issue, ..context }, // always patch in latest Issue state
         Err(_) => AgentContext::new(session_id, repo_config, issue),
     };
-
+    println!("d");
     info!("Agent Session {} resumed", context.session_id);
 
     loop {
@@ -150,8 +155,6 @@ async fn issue_ingestor(
     context: &mut AgentContext,
     service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
-    // context.issue_summary = Some(service.load_issue().await?);
-
     info!(
         "Session {} Ingested Issue {}",
         context.session_id, context.issue.title
@@ -166,6 +169,18 @@ async fn spec_refiner(
     context: &mut AgentContext,
     service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
+    let maybe_last_comment = context.issue.comments.last();
+    if let Some(last_comment) = maybe_last_comment
+        && last_comment.author == repo_service::AuthorClass::Agent
+    {
+        return Ok(ControlFlow::Pause {
+            reason: "Already responded to user, still waiting for reply.".to_string(),
+            next_node: Node::SpecRefiner,
+        });
+    }
+    // User has given us an update
+    // If it's sufficient clarification or confirmation, we can proceed to Node::Planner
+    // otherwise, respond with a request for more clarification from the user.
     Ok(ControlFlow::Pause {
         next_node: Node::SpecRefiner,
         reason: "Waiting for issue clarification from user.".to_string(),
