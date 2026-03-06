@@ -76,7 +76,7 @@ pub async fn run_agent(
 
     let restored_context = AgentContext::load_from_json(session_id.clone()).await;
     let mut context = match restored_context {
-        Ok(context) => context,
+        Ok(context) => AgentContext { issue, ..context }, // always patch in latest Issue state
         Err(_) => AgentContext::new(session_id, repo_config, issue),
     };
 
