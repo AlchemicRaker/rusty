@@ -170,7 +170,9 @@ async fn issue_ingestor(
 
 #[derive(Deserialize)]
 struct SpecDecision {
-    #[serde(rename = "approved_and_ready_for_implementation")]
+    #[serde(rename = "ready_for_implementation")]
+    ready: bool,
+    #[serde(rename = "proposed_spec_fully_approved_by_user")]
     approved: bool,
     questions: Vec<String>,
     refined_spec: String,
@@ -180,6 +182,19 @@ async fn spec_refiner(
     context: &mut AgentContext,
     service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
+    let last_response = context.issue.comments.last();
+    if let Some(comment) = last_response {
+        match comment.author {
+            repo_service::AuthorClass::Agent => {
+                return Ok(ControlFlow::Pause {
+                    reason: format!("Already awaiting user response"),
+                    next_node: Node::SpecRefiner,
+                });
+            }
+            _ => {}
+        }
+    }
+
     let grok = GrokClient::new().expect("Failed to create a GrokClient");
 
     let system = load_prompt("spec_refiner")
@@ -205,11 +220,12 @@ async fn spec_refiner(
         "schema": {
             "type": "object",
             "properties": {
-                "approved_and_ready_for_implementation": { "type": "boolean" },
+                "ready_for_implementation": { "type": "boolean" },
+                "proposed_spec_fully_approved_by_user": { "type": "boolean" },
                 "questions": {"type":"array", "items": {"type":"string"}},
                 "refined_spec": {"type":"string"}
             },
-            "required": ["approved_and_ready_for_implementation", "questions", "refined_spec"],
+            "required": ["ready_for_implementation", "proposed_spec_fully_approved_by_user", "questions", "refined_spec"],
             "additionalProperties": false
         }
     });
@@ -226,17 +242,44 @@ async fn spec_refiner(
         .expect("Failed to call Grok to get a spec decision");
 
     info!(
-        "Grok decision: approved={}, questions={:?}, refined_spec={}",
-        decision.approved, decision.questions, decision.refined_spec
+        "Grok decision: ready={} approved={}, questions={:?}, refined_spec={}",
+        decision.ready, decision.approved, decision.questions, decision.refined_spec
     );
 
-    if decision.approved {
-        // Respond with a refined spec
+    if decision.approved && decision.ready {
+        // TODO: don't respond now - let the Planner plan and create the next response instead, with coding details (and later, wait until a PR is created and post the PR here)
+        let response_body = format!("**Spec approved and ready for implementation!**");
+
+        service
+            .post_comment(&response_body)
+            .await
+            .expect("Failed to post approval confirmation response");
+
         Ok(ControlFlow::Continue {
             next_node: Node::Planner,
         })
+    } else if decision.ready || decision.questions.iter().count() == 0 {
+        let response_body = format!("**Proposed Spec:**\n\n{}", decision.refined_spec);
+
+        service
+            .post_comment(&response_body)
+            .await
+            .expect("Failed to post spec proposal response");
+
+        Ok(ControlFlow::Pause {
+            reason: format!("Spec needs user approval: {:?}", decision.refined_spec),
+            next_node: Node::SpecRefiner,
+        })
     } else {
-        // Respond with a list of questions
+        let question_list_str = decision.questions.join("\n\n");
+
+        let response_body = format!("**Spec Refinement Questions:**\n\n{}", question_list_str);
+
+        service
+            .post_comment(&response_body)
+            .await
+            .expect("Failed to post spec clarification response");
+
         Ok(ControlFlow::Pause {
             reason: format!("Spec needs clarification: {:?}", decision.questions),
             next_node: Node::SpecRefiner,

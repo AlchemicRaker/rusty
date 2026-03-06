@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::fs::read_to_string;
+use tracing::{debug, info};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum RepoConfig {
@@ -19,6 +20,8 @@ pub enum RepoConfig {
 #[async_trait]
 pub trait RepoService {
     async fn load_issue(&self) -> Result<Issue>;
+
+    async fn post_comment(&self, body: &str) -> Result<()>;
 }
 
 struct GitHubRepoService {
@@ -112,6 +115,16 @@ impl RepoService for GitHubRepoService {
             comments,
         })
     }
+
+    async fn post_comment(&self, body: &str) -> Result<()> {
+        let issue_handler = self.client.issues(&self.owner, &self.repo);
+        issue_handler
+            .create_comment(self.issue_number, body)
+            .await
+            .expect("Failed to post comment to GitHub issue");
+        info!("Posted comment to GitHub issue #{}", self.issue_number);
+        Ok(())
+    }
 }
 
 struct LocalRepoService {
@@ -126,6 +139,19 @@ impl RepoService for LocalRepoService {
         let json = read_to_string(path).await?;
         let context: Issue = serde_json::from_str(&json)?;
         Ok(context)
+    }
+
+    async fn post_comment(&self, body: &str) -> Result<()> {
+        let path = format!("{}/agent_response.md", self.path);
+        let content = format!("{}\n\n---\n", body);
+
+        tokio::fs::write(&path, content)
+            .await
+            .expect("Failed to write local agent response");
+
+        info!("Local response saved to {}", path);
+
+        Ok(())
     }
 }
 
