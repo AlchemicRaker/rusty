@@ -1,6 +1,7 @@
 mod grok_client;
 mod logging;
 mod repo_service;
+pub use crate::grok_client::Tool;
 use crate::{grok_client::GrokClient, repo_service::RepoService};
 use anyhow::{Context, Result};
 use repo_service::Issue;
@@ -67,10 +68,8 @@ pub async fn run_agent(
     step_mode: bool,
     repo_config: RepoConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // logging
-    println!("a");
     logging::prep_logging().await?;
-    println!("b");
+
     // restore or generate baseline AgentContext
 
     let service = repo_service::create_repo_service(repo_config.clone())
@@ -79,13 +78,13 @@ pub async fn run_agent(
         .load_issue()
         .await
         .expect("Failed to load issues from repo");
-    println!("c");
+
     let restored_context = AgentContext::load_from_json(session_id.clone()).await;
     let mut context = match restored_context {
         Ok(context) => AgentContext { issue, ..context }, // always patch in latest Issue state
         Err(_) => AgentContext::new(session_id, repo_config, issue),
     };
-    println!("d");
+
     info!("Agent Session {} resumed", context.session_id);
 
     loop {
@@ -237,6 +236,7 @@ async fn spec_refiner(
             &user,
             schema,
             "spec_decision",
+            None, //Some(vec![Tool::WebSearch]),
         )
         .await
         .expect("Failed to call Grok to get a spec decision");

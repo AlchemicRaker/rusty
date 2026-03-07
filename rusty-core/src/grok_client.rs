@@ -32,17 +32,23 @@ pub struct GrokClient {
 
 pub enum Model {
     Grok4_1FastReasoning,
-    Grok4_1FastNonReasoning,
-    GrokCodeFast1,
-    Grok4Expert,
+    // Grok4_1FastNonReasoning,
+    // GrokCodeFast1,
+    // Grok4Expert,
+}
+
+pub enum Tool {
+    WebSearch,
+    // XSearch,
+    // CodeExecution,
 }
 
 fn model_to_str(model: Model) -> String {
     match model {
         Model::Grok4_1FastReasoning => "grok-4-1-fast-reasoning".to_string(),
-        Model::Grok4_1FastNonReasoning => "grok-4-1-fast-non-reasoning".to_string(),
-        Model::GrokCodeFast1 => "grok-code-fast-1".to_string(),
-        Model::Grok4Expert => "grok-4-0709".to_string(),
+        // Model::Grok4_1FastNonReasoning => "grok-4-1-fast-non-reasoning".to_string(),
+        // Model::GrokCodeFast1 => "grok-code-fast-1".to_string(),
+        // Model::Grok4Expert => "grok-4-0709".to_string(),
     }
 }
 
@@ -63,10 +69,22 @@ impl GrokClient {
         user_prompt: &str,
         schema: serde_json::Value,
         schema_name: &str,
+        tools: Option<Vec<Tool>>,
     ) -> Result<T>
     where
         T: for<'de> Deserialize<'de>,
     {
+        let tools_array = if let Some(tool_list) = tools {
+            let mut arr = vec![];
+            for t in tool_list {
+                match t {
+                    Tool::WebSearch => arr.push(serde_json::json!({"type": "web_search"})),
+                }
+            }
+            Some(arr)
+        } else {
+            None
+        };
         let payload = serde_json::json!({
             "model": model_to_str(model),
             "input": [
@@ -80,8 +98,8 @@ impl GrokClient {
                     "strict": true,
                     "schema": schema,
                 }
-            }
-            // TODO: "tools": []
+            },
+            "tools": tools_array.unwrap_or_default(),
         });
 
         let resp = self
