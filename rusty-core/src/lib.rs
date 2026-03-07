@@ -3,7 +3,7 @@ mod logging;
 mod repo_service;
 pub use crate::grok_client::Tool;
 use crate::{grok_client::GrokClient, repo_service::RepoService};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use repo_service::Issue;
 pub use repo_service::RepoConfig;
 use serde::{Deserialize, Serialize};
@@ -155,7 +155,7 @@ async fn dispatch_node(
 // For brand new issues, populate some baseline session state (AgentContext) just once
 async fn issue_ingestor(
     context: &mut AgentContext,
-    service: &Box<dyn RepoService>,
+    _service: &Box<dyn RepoService>,
 ) -> Result<ControlFlow, Box<dyn std::error::Error>> {
     info!(
         "Session {} Ingested Issue {}",

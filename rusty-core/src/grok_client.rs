@@ -1,11 +1,11 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::env;
-use tracing::{debug, info};
+use tracing::debug;
 
 #[derive(Deserialize)]
 pub struct GrokResponse {
-    pub id: String,
+    // pub id: String,
     pub output: Vec<OutputItem>,
 }
 

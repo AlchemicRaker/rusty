@@ -10,7 +10,7 @@ pub async fn prep_logging() -> Result<(), Box<dyn std::error::Error>> {
     let rolling_file_appender = RollingFileAppender::new(Rotation::DAILY, logs_path, "agent.log");
 
     let env_filter_level = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("trace"));
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"));
 
     tracing_subscriber::registry()
         .with(env_filter_level)

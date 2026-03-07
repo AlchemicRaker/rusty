@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::fs::read_to_string;
-use tracing::{debug, info};
+use tracing::info;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub enum RepoConfig {
