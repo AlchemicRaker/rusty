@@ -1,0 +1,8 @@
+target
+.git
+sessions
+logs
+*.log
+.env
+Dockerfile
+docker-compose.yml

@@ -41,6 +41,11 @@ pub enum Tool {
     WebSearch,
     // XSearch,
     // CodeExecution,
+    GetRepoOverview,
+    ListDirectory,
+    ReadFile,
+    GrepSearch,
+    FindFiles,
 }
 
 fn model_to_str(model: Model) -> String {
@@ -55,7 +60,7 @@ fn model_to_str(model: Model) -> String {
 impl GrokClient {
     pub fn new() -> Result<Self> {
         let api_key =
-            env::var("XAI_API_KEY").expect("XAI_API_KEY environment variable is required");
+            env::var("XAI_API_KEY").expect("XAI_API_KEY environment variable is required!");
         Ok(Self {
             client: reqwest::Client::new(),
             api_key,
@@ -79,6 +84,7 @@ impl GrokClient {
             for t in tool_list {
                 match t {
                     Tool::WebSearch => arr.push(serde_json::json!({"type": "web_search"})),
+                    _ => {}
                 }
             }
             Some(arr)

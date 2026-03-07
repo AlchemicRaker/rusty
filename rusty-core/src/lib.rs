@@ -31,13 +31,13 @@ impl AgentContext {
     // save and load from local sessions folder
     async fn save_to_json(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
-        let path_str = format!("sessions/{}_context.json", self.session_id).to_string();
+        let path_str = format!("/sessions/{}_context.json", self.session_id).to_string();
         let path = Path::new(&path_str);
         write(path, json).await?;
         Ok(())
     }
     async fn load_from_json(session_id: String) -> Result<Self> {
-        let path_str = format!("sessions/{}_context.json", session_id).to_string();
+        let path_str = format!("/sessions/{}_context.json", session_id).to_string();
         let path = Path::new(&path_str);
         let json = read_to_string(path).await?;
         let context: AgentContext = serde_json::from_str(&json)?;
@@ -242,7 +242,7 @@ async fn spec_refiner(
         .expect("Failed to call Grok to get a spec decision");
 
     info!(
-        "Grok decision: ready={} approved={}, questions={:?}, spec_draft={}",
+        "Grok'sss decision: ready={} approved={}, questions={:?}, spec_draft={}",
         decision.ready, decision.approved, decision.questions, decision.spec_draft
     );
 
@@ -288,7 +288,7 @@ async fn spec_refiner(
 }
 
 async fn load_prompt(name: &str) -> Result<String> {
-    let path = format!("prompts/{}.md", name);
+    let path = format!("/prompts/{}.md", name);
     let content = read_to_string(&path)
         .await
         .expect(format!("Failed to read prompt file {}", path).as_str());

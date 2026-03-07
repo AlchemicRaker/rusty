@@ -1,0 +1,23 @@
+version: '3.9'
+
+services:
+  rusty:
+    build: .
+    container_name: rusty-agent
+    user: "1000:1000" # non-root
+    # restart: unless-stopped
+    environment:
+      - XAI_API_KEY=${XAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - RUSTY_LOG=debug # or trace in development
+    volumes:
+      # This is the magic volume — the agent lives here
+      - rusty_workspace:/workspace
+      # Persistent sessions & logs across restarts
+      - ./sessions:/sessions
+      - ./logs:/logs
+      - ./prompts:/prompts
+    working_dir: /workspace
+
+volumes:
+  rusty_workspace: # named volume for GitHub clones

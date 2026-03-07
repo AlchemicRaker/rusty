@@ -5,7 +5,7 @@ use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberI
 
 use tokio::fs::create_dir_all;
 pub async fn prep_logging() -> Result<(), Box<dyn std::error::Error>> {
-    let logs_path = Path::new("./logs");
+    let logs_path = Path::new("/logs");
     create_dir_all(logs_path).await?;
     let rolling_file_appender = RollingFileAppender::new(Rotation::DAILY, logs_path, "agent.log");
 
