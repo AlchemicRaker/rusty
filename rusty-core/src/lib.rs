@@ -1,6 +1,7 @@
 mod grok_client;
 mod logging;
 mod repo_service;
+mod tools;
 pub use crate::grok_client::Tool;
 use crate::{grok_client::GrokClient, repo_service::RepoService};
 use anyhow::Result;
@@ -128,6 +129,16 @@ pub async fn run_agent(
         .expect("Failed to persist session state");
 
     info!("Agent Session {} suspended", context.session_id);
+
+    // TODO: remove
+    // let content = tools::file_system::read_file(
+    //     "/workspace",
+    //     "Cargo.toml".to_string(),
+    //     Some(1),
+    //     Some(5000), // should be capped at 2000
+    // )?;
+    // info!("{}", content);
+
     Ok(())
 }
 

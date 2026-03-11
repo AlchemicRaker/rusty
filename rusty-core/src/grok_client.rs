@@ -3,6 +3,8 @@ use serde::Deserialize;
 use std::env;
 use tracing::debug;
 
+use crate::tools;
+
 #[derive(Deserialize)]
 pub struct GrokResponse {
     // pub id: String,
@@ -41,11 +43,51 @@ pub enum Tool {
     WebSearch,
     // XSearch,
     // CodeExecution,
-    GetRepoOverview,
-    ListDirectory,
+    // GetRepoOverview,
+    // ListDirectory,
     ReadFile,
-    GrepSearch,
-    FindFiles,
+    // GrepSearch,
+    // FindFiles,
+}
+
+pub enum ToolCall {
+    ReadFile {
+        file_path: String,
+        start_line: Option<usize>,
+        end_line: Option<usize>,
+    },
+}
+
+impl Tool {
+    pub fn to_definition(&self) -> serde_json::Value {
+        match self {
+            Tool::WebSearch => serde_json::json!({"type": "web_search"}),
+            Tool::ReadFile => serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read a file from the workspace with optional line range. Always use relative paths.",
+                    "parameters": {
+                        "file_path": {"type":"string","description": "Relative path from repository root"},
+                        "start_line": {"type":"integer","description":"1-based start line (optional)"},
+                        "end_line": {"type":"integer","description":"1-based end line (optional)"},
+                    },
+                    "required": ["file_path"],
+                    "additionalProperties": false
+                }
+            }),
+        }
+    }
+}
+
+async fn execute_tool(call: ToolCall) -> Result<String> {
+    match call {
+        ToolCall::ReadFile {
+            file_path,
+            start_line,
+            end_line,
+        } => tools::read_file("/workspace", file_path, start_line, end_line).await,
+    }
 }
 
 fn model_to_str(model: Model) -> String {
@@ -79,18 +121,12 @@ impl GrokClient {
     where
         T: for<'de> Deserialize<'de>,
     {
-        let tools_array = if let Some(tool_list) = tools {
-            let mut arr = vec![];
-            for t in tool_list {
-                match t {
-                    Tool::WebSearch => arr.push(serde_json::json!({"type": "web_search"})),
-                    _ => {}
-                }
-            }
-            Some(arr)
-        } else {
-            None
-        };
+        let tool_defs: Vec<serde_json::Value> = tools
+            .unwrap_or_default()
+            .iter()
+            .map(|t| t.to_definition())
+            .collect();
+
         let payload = serde_json::json!({
             "model": model_to_str(model),
             "input": [
@@ -105,7 +141,7 @@ impl GrokClient {
                     "schema": schema,
                 }
             },
-            "tools": tools_array.unwrap_or_default(),
+            "tools": tool_defs,
         });
 
         let resp = self
