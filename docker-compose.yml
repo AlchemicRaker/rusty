@@ -12,7 +12,9 @@ services:
       - RUSTY_LOG=debug # or trace in development
     volumes:
       # This is the magic volume — the agent lives here
-      - rusty_workspace:/workspace
+      # - rusty_workspace:/workspace
+      - ./workspace:/workspace
+
       # Persistent sessions & logs across restarts
       - ./sessions:/sessions
       - ./logs:/logs

@@ -247,7 +247,7 @@ async fn spec_refiner(
             &user,
             schema,
             "spec_decision",
-            None, //Some(vec![Tool::WebSearch]),
+            Some(vec![Tool::ReadFile]), // None, //Some(vec![Tool::WebSearch]),
         )
         .await
         .expect("Failed to call Grok to get a spec decision");
