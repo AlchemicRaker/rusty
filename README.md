@@ -1,59 +1,51 @@
 # Rusty: Rust + Grok SWE Agent
 
-Rusty is a personal, AI-powered Software Engineering Agent built in Rust, integrated with the Grok API from xAI. It automates tasks like processing GitHub Issues, refining specifications through human-in-the-loop discussions, planning code changes, coding, testing, and creating pull requests—all while ensuring strict human review and no direct merges to protected branches. Designed for budget-conscious private use, especially for oversight from mobile devices.
+Rusty is your personal AI Software Engineering Agent written in Rust. It reads GitHub Issues (or a local workspace), collaborates with you via comments until the spec is approved, then plans, codes, tests (with auto-fixes), and opens a draft PR — never touching protected branches.
 
-## Project Status
-This is a Work in Progress (WIP). The current implementation includes a basic Cargo workspace with `rusty-core` (library for agent logic) and `rusty-cli` (command-line interface). Dependencies like tokio, serde, reqwest, and tracing are set up. A stub top-level runner with logging, node enums, and basic resumability via JSON is implemented. See GOALS.md for the full design roadmap.
+Built for phone-based oversight and strict human review. Budget-aware and fully controllable.
 
-## Features (Planned/MVP)
-- GitHub Issue processing with human collaboration via comments.
-- Node-based workflow: Ingest → Refine Spec → Plan → Code → Test (with auto-retries) → Submit PR → Monitor.
-- Local testing mode for filesystem-based development.
-- Budget-aware Grok model selection (e.g., grok-4-1-fast for planning, grok-code-fast-1 for coding).
-- Docker deployment with docker-compose for easy setup and future AWS migration.
-- Structured outputs via Grok's json_schema for reliability.
-- Logging to files and console for debugging.
-- Resumability with JSON session files.
-- --step flag for paused debugging.
+## Current State (March 2026)
+Fully working:
+- Cargo workspace (`rusty-core` + `rusty-cli`)
+- Docker + docker-compose setup with proper volumes (`/workspace`, `/sessions`, `/logs`, `/prompts`)
+- Custom Grok client using xAI REST `/responses` endpoint with `json_schema` + tool calling
+- `read_file` tool (safe, line-limited, path-traversal protected)
+- `RepoService` trait (GitHub via octocrab + Local filesystem mode)
+- `SpecRefiner` node fully implemented (asks Grok, posts comments, pauses for your input)
+- `IssueIngestor` + top-level runner with `--step` mode and resumability via JSON
+- Structured logging to rolling files + console
+- Non-root Docker user, AWS-migration friendly
 
-## Setup
-1. Clone the repo: `git clone https://github.com/AlchemicRaker/rusty.git`
-2. Navigate to the root: `cd rusty`
-3. Build: `cargo build`
-4. Run CLI example: `cargo run --bin rusty-cli -- --process test-session --step`
+Still to come: Planner, Coder (with code_queue), Tester retry loop, PRSubmitter.
 
-### Dependencies
-- Rust (latest stable, via rustup)
-- Cargo workspace with:
-  - tokio (async runtime)
-  - serde (JSON serialization)
-  - reqwest (HTTP client for Grok API)
-  - tracing, tracing-subscriber, tracing-appender (logging)
-  - clap (CLI parsing, in rusty-cli)
-- Future: octocrab (GitHub API), Docker.
+## Quick Start
 
-### Environment Variables
-- `RUST_LOG=info` (or trace/debug for more verbosity)
-- Grok API key: `GROK_API_KEY` (to be added)
-- GitHub token: `GITHUB_TOKEN` (to be added)
+1. Clone & enter directory
+2. Copy `.env.example` to `.env` and fill `XAI_API_KEY` + `GITHUB_TOKEN`
+3. `docker compose up --build`
 
-## Usage
-- Start a session: `rusty-cli --process <session_id> [--step]`
-- Resume: Same command reloads from `./data/sessions/<session_id>.json`
-- Logs: In `./logs/agent.log.<date>`
+Example CLI (inside container or via cargo):
+```
+rusty --session my-issue-42 --repo AlchemicRaker/myrepo --issue 42 --step
+```
+Local mode:
+```
+rusty --session test --local /workspace --step
+```
 
-## Development
-- Workspace structure:
-  - `rusty-core/`: Core logic (nodes, context, runner)
-  - `rusty-cli/`: CLI wrapper
-  - `data/sessions/`: JSON state files (gitignored)
-  - `logs/`: Log files (gitignored)
-  - `prompts/`: Template files (to be added)
-- Add nodes in `rusty-core/src/lib.rs` via the enum and run_node match.
-- Test: `cargo test`
+Logs live in `./logs/agent.log.*`  
+Sessions saved in `./sessions/`
 
-## Contributing
-This is a personal project—feel free to fork or suggest improvements via issues.
+## Project Structure
+- `rusty-core/` — all agent logic, Grok client, nodes, tools
+- `rusty-cli/` — thin CLI (clap)
+- `./prompts/*.md` — prompt templates (loaded at runtime)
+- `./sessions/` — resumable JSON state
+- `./workspace/` — your repo (volume-mounted)
 
-## License
-None.
+See `GOALS.md` for the full design and roadmap.
+
+## Environment Variables
+- `XAI_API_KEY` (required)
+- `GITHUB_TOKEN` (required for GitHub mode)
+- `RUSTY_LOG=debug` (or trace)

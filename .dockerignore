@@ -6,3 +6,4 @@ logs
 .env
 Dockerfile
 docker-compose.yml
+workspace
