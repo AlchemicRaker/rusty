@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
-use std::fs::{self, File};
+use anyhow::Result;
+use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 use tokio::task;
@@ -52,7 +52,7 @@ pub async fn read_file(
         let reader = BufReader::new(file);
         let lines: Vec<String> = match reader.lines().collect::<Result<_, _>>() {
             Ok(l) => l,
-            Err(e) => {
+            Err(_) => {
                 return Ok(format!(
                     "ERROR: Failed to read lines from {}\nSuggestion: The file may be binary or too large - try a different approach.",
                     file_path,

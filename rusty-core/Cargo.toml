@@ -18,3 +18,4 @@ ignore = "0.4"
 syn = { version = "2.0", features = ["full", "parsing", "visit"] }
 quote = "1.0"  # optional for pretty-printing if you want
 proc-macro2 = { version = "1.0", features = ["span-locations"] }
+regex = "1.11"

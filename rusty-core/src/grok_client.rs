@@ -53,7 +53,7 @@ pub enum Tool {
     // XSearch,
     // CodeExecution,
     GetRepoOverview,
-    // ListDirectory,
+    ListDirectory,
     ReadFile,
     // GrepSearch,
     // FindFiles,
@@ -101,6 +101,31 @@ impl Tool {
                     "additionalProperties": false
                 }
             }),
+
+            Tool::ListDirectory => serde_json::json!({
+                "type": "function",
+                "name": "list_directory",
+                "description": "USE THIS TOOL to lists files and directories in the given path (relative to the workspace root). Respects .gitignore and other ignore files. Use this to discover what files exist before reading or analyzing them. Returns a tree-like Markdown list with file types. Call with '/' for root. Optional max_depth to limit recursion.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "REQUIRED. Relative path from workspace root (e.g. 'src/', 'tests/', or '/' for root). Required."
+                        },
+                        "max_depth": {
+                            "type": "integer",
+                            "description": "Optional. Max recursion depth (default 3, max 10). Use 0 for non-recursive."
+                        },
+                        "include_hidden": {
+                            "type": "boolean",
+                            "description": "Optional. Show dotfiles? (default false)"
+                        }
+                    }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }),
         }
     }
 }
@@ -112,6 +137,11 @@ pub enum ToolCall {
         end_line: Option<usize>,
     },
     GetRepoOverview {},
+    ListDirectory {
+        path: String,
+        max_depth: Option<usize>,
+        include_hidden: Option<bool>,
+    },
 }
 
 async fn execute_tool(call: ToolCall) -> Result<String> {
@@ -122,6 +152,11 @@ async fn execute_tool(call: ToolCall) -> Result<String> {
             end_line,
         } => tools::read_file("/workspace", file_path, start_line, end_line).await,
         ToolCall::GetRepoOverview {} => tools::get_repo_overview("/workspace").await,
+        ToolCall::ListDirectory {
+            path,
+            max_depth,
+            include_hidden,
+        } => tools::list_directory("/workspace", path, max_depth, include_hidden).await,
     }
 }
 

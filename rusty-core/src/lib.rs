@@ -130,6 +130,9 @@ pub async fn run_agent(
 
     info!("Agent Session {} suspended", context.session_id);
 
+    let ld = tools::list_directory("/workspace", "rusty-core".to_string(), None, None).await?;
+    info!("{}", ld);
+
     Ok(())
 }
 
@@ -234,13 +237,17 @@ async fn spec_refiner(
             &user,
             schema,
             "spec_decision",
-            Some(vec![Tool::ReadFile, Tool::GetRepoOverview]),
+            Some(vec![
+                Tool::ReadFile,
+                Tool::GetRepoOverview,
+                Tool::ListDirectory,
+            ]),
         )
         .await
         .expect("Failed to call Grok to get a spec decision");
 
     info!(
-        "Grok'sss decision: ready={} approved={}, questions={:?}, spec_draft={}",
+        "Grok's decision: ready={} approved={}, questions={:?}, spec_draft={}",
         decision.ready, decision.approved, decision.questions, decision.spec_draft
     );
 
