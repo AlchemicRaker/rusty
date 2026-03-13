@@ -52,7 +52,7 @@ pub enum Tool {
     WebSearch,
     // XSearch,
     // CodeExecution,
-    // GetRepoOverview,
+    GetRepoOverview,
     // ListDirectory,
     ReadFile,
     // GrepSearch,
@@ -67,7 +67,7 @@ impl Tool {
             Tool::ReadFile => serde_json::json!({
                 "type": "function",
                 "name": "read_file",
-                "description": "CRITICAL TOOL - ALWAYS USE THIS to inspect the codebase. You MUST provide a concrete file_path. Examples: 'Cargo.toml', 'src/main.rs', 'src/lib.rs', 'README.md'. Never call this tool without a valid file_path. Use forward slashes only.",
+                "description": "USE THIS TOOL to inspect the codebase. You MUST provide a concrete file_path. Examples: 'Cargo.toml', 'src/main.rs', 'src/lib.rs', 'README.md'. Never call this tool without a valid file_path. Use forward slashes only.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -88,6 +88,19 @@ impl Tool {
                     "additionalProperties": false
                 }
             }),
+
+            Tool::GetRepoOverview => serde_json::json!({
+                "type": "function",
+                "name": "get_repo_overview",
+                "description": "USE THIS TOOL to understand the entire codebase architecture before any planning or editing. Returns a concise Markdown tree of the repo (respecting .gitignore) plus (for Rust files) extracted function/struct/trait signatures.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                }
+            }),
         }
     }
 }
@@ -98,6 +111,7 @@ pub enum ToolCall {
         start_line: Option<usize>,
         end_line: Option<usize>,
     },
+    GetRepoOverview {},
 }
 
 async fn execute_tool(call: ToolCall) -> Result<String> {
@@ -107,6 +121,7 @@ async fn execute_tool(call: ToolCall) -> Result<String> {
             start_line,
             end_line,
         } => tools::read_file("/workspace", file_path, start_line, end_line).await,
+        ToolCall::GetRepoOverview {} => tools::get_repo_overview("/workspace").await,
     }
 }
 
@@ -247,6 +262,7 @@ impl GrokClient {
                                 end_line: args["end_line"].as_u64().map(|v| v as usize),
                             }
                         }
+                        "get_repo_overview" => ToolCall::GetRepoOverview {},
                         _ => continue,
                     };
 

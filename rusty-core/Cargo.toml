@@ -14,3 +14,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+ignore = "0.4"
+syn = { version = "2.0", features = ["full", "parsing", "visit"] }
+quote = "1.0"  # optional for pretty-printing if you want
+proc-macro2 = { version = "1.0", features = ["span-locations"] }

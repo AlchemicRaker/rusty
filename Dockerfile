@@ -25,6 +25,10 @@ RUN cargo build --release --package rusty-cli --bin rusty-cli
 # source code
 COPY . .
 
+# prompt a minimal recompile
+RUN touch rusty-cli/src/main.rs
+RUN touch rusty-core/src/lib.rs
+
 RUN cargo build --release --package rusty-cli --bin rusty-cli
 
 # runtime
@@ -50,4 +54,4 @@ COPY --from=builder /app/target/release/rusty-cli /usr/local/bin/rusty
 
 # ENTRYPOINT ["rusty"]
 
-CMD ["rusty", "--session", "rusty", "--repo", "AlchemicRaker/rusty", "--issue", "1"]
+CMD ["rusty", "--session", "rusty", "--repo", "AlchemicRaker/rusty", "--issue", "2"]

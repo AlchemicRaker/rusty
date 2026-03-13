@@ -9,7 +9,7 @@ services:
     environment:
       - XAI_API_KEY=${XAI_API_KEY}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - RUSTY_LOG=debug # or trace in development
+      - RUSTY_LOG=trace # or trace in development
     volumes:
       # This is the magic volume — the agent lives here
       # - rusty_workspace:/workspace

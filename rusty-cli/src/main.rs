@@ -1,6 +1,7 @@
 use clap::Parser;
 use rusty_core::{RepoConfig, run_agent};
 use tokio::runtime::Runtime;
+use tracing::info;
 
 // --session <session_id> --step
 #[derive(Parser)]
@@ -23,6 +24,7 @@ struct Args {
 }
 
 fn main() {
+    info!("Launching Rusty...");
     let args = Args::parse();
     let session_id = args.session.expect("Missing session ID");
 
@@ -48,6 +50,7 @@ fn main() {
         panic!("Must provide --local OR --repo + --issue");
     };
 
+    info!("Starting Rusty Agent Core...");
     let rt = Runtime::new().unwrap();
     let _result =
         rt.block_on(async { run_agent(session_id.clone(), args.step, repo_config).await });

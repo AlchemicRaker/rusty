@@ -10,14 +10,14 @@ pub use repo_service::RepoConfig;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::fs::{read_to_string, write};
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 #[derive(Serialize, Deserialize)]
 struct AgentContext {
     session_id: String,
     current_node: Node,
     repo_config: RepoConfig,
-    issue: Issue, // brief auto-generated issue summary
+    issue: Issue,
 }
 
 impl AgentContext {
@@ -130,15 +130,6 @@ pub async fn run_agent(
 
     info!("Agent Session {} suspended", context.session_id);
 
-    // TODO: remove
-    // let content = tools::file_system::read_file(
-    //     "/workspace",
-    //     "Cargo.toml".to_string(),
-    //     Some(1),
-    //     Some(5000), // should be capped at 2000
-    // )?;
-    // info!("{}", content);
-
     Ok(())
 }
 
@@ -205,24 +196,20 @@ async fn spec_refiner(
         }
     }
 
+    let overview = tools::get_repo_overview("/workspace")
+        .await
+        .unwrap_or_else(|_| "Overview unavailable.".to_string());
+    debug!("Overview: {}", overview);
+
     let grok = GrokClient::new().expect("Failed to create a GrokClient");
 
     let system = load_prompt("spec_refiner")
         .await
         .expect("Failed to load spec refiner prompt");
 
-    let repo_string = match &context.repo_config {
-        RepoConfig::GitHub {
-            owner,
-            repo,
-            issue_number: _,
-        } => format!("Repository: https://github.com/{}/{}\n", owner, repo),
-        _ => "".to_string(),
-    };
-
     let user = format!(
-        "{}Issue title: {}\nBody: {}\nComments: {:?}",
-        repo_string, context.issue.title, context.issue.body, context.issue.comments
+        "# Repository Overview:\n{}\n\n# Issue {}\n## Description: {}\n## Comments: {:?}",
+        overview, context.issue.title, context.issue.body, context.issue.comments
     );
 
     let schema = serde_json::json!({
@@ -247,7 +234,7 @@ async fn spec_refiner(
             &user,
             schema,
             "spec_decision",
-            Some(vec![Tool::ReadFile]), // None, //Some(vec![Tool::WebSearch]),
+            Some(vec![Tool::ReadFile, Tool::GetRepoOverview]),
         )
         .await
         .expect("Failed to call Grok to get a spec decision");
