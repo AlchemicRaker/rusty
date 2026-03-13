@@ -298,6 +298,26 @@ impl GrokClient {
                             }
                         }
                         "get_repo_overview" => ToolCall::GetRepoOverview {},
+                        "list_directory" => {
+                            if arguments.trim() == "{}" || arguments.trim().is_empty() {
+                                info!(
+                                    "Grok called list_directory with EMPTY arguments — sending correction"
+                                );
+                                tool_outputs.push(serde_json::json!({
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": "ERROR: list_directory was called without any arguments. You MUST provide 'path'. Example: {\"path\": \"src\"}. Try again with a valid path."
+                                }));
+                                continue;
+                            }
+                            let args: serde_json::Value = serde_json::from_str(arguments)
+                                .unwrap_or_else(|_| serde_json::json!({}));
+                            ToolCall::ListDirectory {
+                                path: args["path"].as_str().unwrap_or_default().to_string(),
+                                include_hidden: args["include_hidden"].as_bool(),
+                                max_depth: args["max_depth"].as_u64().map(|v| v as usize),
+                            }
+                        }
                         _ => continue,
                     };
 
