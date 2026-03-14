@@ -60,4 +60,4 @@ COPY --from=builder /app/target/release/rusty-cli /usr/local/bin/rusty
 
 # ENTRYPOINT ["rusty"]
 
-CMD ["rusty", "--session", "rusty", "--repo", "AlchemicRaker/rusty", "--issue", "3"]
+CMD ["rusty", "--session", "rusty", "--repo", "AlchemicRaker/rusty", "--issue", "2"]

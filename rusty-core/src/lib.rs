@@ -130,9 +130,6 @@ pub async fn run_agent(
 
     info!("Agent Session {} suspended", context.session_id);
 
-    let ld = tools::list_directory("/workspace", "rusty-core".to_string(), None, None).await?;
-    info!("{}", ld);
-
     Ok(())
 }
 

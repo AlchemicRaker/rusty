@@ -9,8 +9,11 @@ pub async fn grep_search(
     path: Option<String>,
     max_results: Option<usize>,
     file_extension: Option<String>,
+    context_lines: Option<usize>,
 ) -> Result<String> {
     let max = max_results.unwrap_or(30).min(100);
+    let ctx = context_lines.unwrap_or(4).min(10);
+
     let search_path = path.unwrap_or_else(|| "/".to_string());
     let root = Path::new(workspace_root);
     let target = root.join(search_path.trim_start_matches('/'));
@@ -36,7 +39,10 @@ pub async fn grep_search(
         walker.types(tb.build().unwrap());
     }
 
-    let mut output = format!("# Grep Search: `{}` (max {} results)\n\n", pattern, max);
+    let mut output = format!(
+        "# Grep Search: `{}` (context ±{}, max {} results)\n\n",
+        pattern, ctx, max
+    );
     let mut count = 0;
 
     for entry in walker.build() {
@@ -57,10 +63,24 @@ pub async fn grep_search(
             Err(_) => continue,
         };
 
-        for (i, line) in content.lines().enumerate() {
+        let lines: Vec<&str> = content.lines().collect();
+        let total_lines = lines.len();
+
+        for (i, line) in lines.iter().enumerate() {
             if re.is_match(line) {
                 let rel_path = p.strip_prefix(root).unwrap_or(p).to_string_lossy();
-                output.push_str(&format!("`{}`:{}: {}\n", rel_path, i + 1, line.trim()));
+
+                let start = (i as i32 - ctx as i32).max(0) as usize;
+                let end = (i + ctx + 1).min(total_lines);
+
+                output.push_str(&format!("### `{}`\n", rel_path));
+                for j in start..end {
+                    let prefix = if j == i { "> " } else { "  " };
+                    let line_num = j + 1;
+                    output.push_str(&format!("{:>6} {} {}\n", line_num, prefix, lines[j]));
+                }
+                output.push_str("---\n\n");
+
                 count += 1;
                 if count >= max {
                     break;

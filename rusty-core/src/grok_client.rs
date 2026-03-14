@@ -149,6 +149,10 @@ impl Tool {
                         "file_extension": {
                             "type": "string",
                             "description": "Optional. e.g. 'rs', 'toml', 'md' (limits to that extension)."
+                        },
+                        "context_lines": {
+                            "type": "integer",
+                            "description": "Optional. Lines of context before/after each match (default 4, max 10)."
                         }
                     },
                     "required": ["pattern"],
@@ -176,6 +180,7 @@ pub enum ToolCall {
         path: Option<String>,
         max_results: Option<usize>,
         file_extension: Option<String>,
+        context_lines: Option<usize>,
     },
     SearchRustDocs {
         pattern: String,
@@ -202,12 +207,23 @@ async fn execute_tool(call: ToolCall) -> Result<String> {
             path,
             max_results,
             file_extension,
-        } => tools::grep_search("/workspace", pattern, path, max_results, file_extension).await,
+            context_lines,
+        } => {
+            tools::grep_search(
+                "/workspace",
+                pattern,
+                path,
+                max_results,
+                file_extension,
+                context_lines,
+            )
+            .await
+        }
         ToolCall::SearchRustDocs {
             pattern,
             section,
             max_results,
-        } => tools::grep_search("/docs", pattern, section, max_results, None).await,
+        } => tools::grep_search("/docs", pattern, section, max_results, None, Some(10)).await,
     }
 }
 
@@ -391,6 +407,7 @@ impl GrokClient {
                                 file_extension: args["file_extension"]
                                     .as_str()
                                     .map(|s| s.to_string()),
+                                context_lines: args["context_lines"].as_u64().map(|v| v as usize),
                             }
                         }
                         "search_rust_docs" => {
