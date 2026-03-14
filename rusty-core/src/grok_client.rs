@@ -55,7 +55,7 @@ pub enum Tool {
     GetRepoOverview,
     ListDirectory,
     ReadFile,
-    // GrepSearch,
+    GrepSearch,
     // FindFiles,
 }
 
@@ -126,6 +126,35 @@ impl Tool {
                 "required": ["path"],
                 "additionalProperties": false
             }),
+
+            Tool::GrepSearch => serde_json::json!({
+                "type": "function",
+                "name": "grep_search",
+                "description": "USE THIS TOOL to search the entire codebase (or a sub-path) for a regex pattern. Returns file:line:snippet for matches. Respects .gitignore. CRITICAL for finding usages, TODOs, or definitions before editing. Use after list_directory if needed. Limit results to avoid token waste.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "REQUIRED. Rust regex pattern (e.g. 'fn main', 'todo!', 'error:.*')."
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Optional. Subdirectory to search (default '/')."
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Optional. Max matches to return (default 30, max 100)."
+                        },
+                        "file_extension": {
+                            "type": "string",
+                            "description": "Optional. e.g. 'rs', 'toml', 'md' (limits to that extension)."
+                        }
+                    },
+                    "required": ["pattern"],
+                    "additionalProperties": false
+                }
+            }),
         }
     }
 }
@@ -142,6 +171,12 @@ pub enum ToolCall {
         max_depth: Option<usize>,
         include_hidden: Option<bool>,
     },
+    GrepSearch {
+        pattern: String,
+        path: Option<String>,
+        max_results: Option<usize>,
+        file_extension: Option<String>,
+    },
 }
 
 async fn execute_tool(call: ToolCall) -> Result<String> {
@@ -157,6 +192,12 @@ async fn execute_tool(call: ToolCall) -> Result<String> {
             max_depth,
             include_hidden,
         } => tools::list_directory("/workspace", path, max_depth, include_hidden).await,
+        ToolCall::GrepSearch {
+            pattern,
+            path,
+            max_results,
+            file_extension,
+        } => tools::grep_search("/workspace", pattern, path, max_results, file_extension).await,
     }
 }
 
@@ -316,6 +357,30 @@ impl GrokClient {
                                 path: args["path"].as_str().unwrap_or_default().to_string(),
                                 include_hidden: args["include_hidden"].as_bool(),
                                 max_depth: args["max_depth"].as_u64().map(|v| v as usize),
+                            }
+                        }
+                        "grep_search" => {
+                            if arguments.trim() == "{}" || arguments.trim().is_empty() {
+                                info!(
+                                    "Grok called grep_search with EMPTY arguments — sending correction"
+                                );
+                                tool_outputs.push(serde_json::json!({
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": "ERROR: grep_search was called without any arguments. You MUST provide 'pattern'. Example: {\"pattern\": \"todo!\"}. Try again."
+                                }));
+                                continue;
+                            }
+                            let args: serde_json::Value = serde_json::from_str(arguments)
+                                .unwrap_or_else(|_| serde_json::json!({}));
+
+                            ToolCall::GrepSearch {
+                                pattern: args["pattern"].as_str().unwrap_or_default().to_string(),
+                                path: args["path"].as_str().map(|s| s.to_string()),
+                                max_results: args["max_results"].as_u64().map(|v| v as usize),
+                                file_extension: args["file_extension"]
+                                    .as_str()
+                                    .map(|s| s.to_string()),
                             }
                         }
                         _ => continue,

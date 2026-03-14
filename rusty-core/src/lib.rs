@@ -241,6 +241,7 @@ async fn spec_refiner(
                 Tool::ReadFile,
                 Tool::GetRepoOverview,
                 Tool::ListDirectory,
+                Tool::GrepSearch,
             ]),
         )
         .await

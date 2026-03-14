@@ -4,3 +4,5 @@ pub mod repo_overview;
 pub use repo_overview::get_repo_overview;
 pub mod list_directory;
 pub use list_directory::list_directory;
+pub mod grep_search;
+pub use grep_search::grep_search;
