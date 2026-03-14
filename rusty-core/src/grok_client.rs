@@ -177,6 +177,11 @@ pub enum ToolCall {
         max_results: Option<usize>,
         file_extension: Option<String>,
     },
+    SearchRustDocs {
+        pattern: String,
+        section: Option<String>,
+        max_results: Option<usize>,
+    },
 }
 
 async fn execute_tool(call: ToolCall) -> Result<String> {
@@ -198,6 +203,11 @@ async fn execute_tool(call: ToolCall) -> Result<String> {
             max_results,
             file_extension,
         } => tools::grep_search("/workspace", pattern, path, max_results, file_extension).await,
+        ToolCall::SearchRustDocs {
+            pattern,
+            section,
+            max_results,
+        } => tools::grep_search("/docs", pattern, section, max_results, None).await,
     }
 }
 
@@ -381,6 +391,27 @@ impl GrokClient {
                                 file_extension: args["file_extension"]
                                     .as_str()
                                     .map(|s| s.to_string()),
+                            }
+                        }
+                        "search_rust_docs" => {
+                            if arguments.trim() == "{}" || arguments.trim().is_empty() {
+                                info!(
+                                    "Grok called search_rust_docs with EMPTY arguments — sending correction"
+                                );
+                                tool_outputs.push(serde_json::json!({
+                                    "type": "function_call_output",
+                                    "call_id": call_id,
+                                    "output": "ERROR: search_rust_docs was called without any arguments. You MUST provide 'pattern'. Example: {\"pattern\": \"info!\"}. Try again."
+                                }));
+                                continue;
+                            }
+                            let args: serde_json::Value = serde_json::from_str(arguments)
+                                .unwrap_or_else(|_| serde_json::json!({}));
+
+                            ToolCall::SearchRustDocs {
+                                pattern: args["pattern"].as_str().unwrap_or_default().to_string(),
+                                section: args["section"].as_str().map(|s| s.to_string()),
+                                max_results: args["max_results"].as_u64().map(|v| v as usize),
                             }
                         }
                         _ => continue,
